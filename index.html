@@ -574,6 +574,14 @@ body.exporting .checkline input[type="checkbox"]{
   flex:0 0 14px !important;
 }
 
+
+/* En el PDF no mostrar placeholders usados solo para la vista móvil */
+body.exporting input::placeholder,
+body.exporting textarea::placeholder{
+  color:transparent !important;
+  opacity:0 !important;
+}
+
 </style>
 </head>
 <body>
