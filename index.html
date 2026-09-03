@@ -127,6 +127,9 @@ h1{
   min-height:19px;
 }
 .field .val,.sign .val{white-space:pre-wrap;word-break:break-word}
+.duo{display:flex;gap:12px}
+.duo input:first-child{flex:1.45}
+.duo input:last-child{flex:1}
 .field input,.field .val{height:22px;min-height:22px}
 .field textarea{
   min-height:60px;resize:none;overflow:hidden;
@@ -152,6 +155,16 @@ label.checkline,.checkline{
   flex:0 0 11px;width:11px;height:11px;margin:1px 0 0;padding:0;
   border:1px solid var(--principal);border-radius:2px;background:#fff;
   cursor:pointer;position:relative;
+}
+.pax-acciones{display:flex;gap:10px;margin-top:6px}
+.pax-acciones button{
+  background:#fff;color:var(--principal);border:1px solid var(--linea);
+  border-radius:7px;padding:5px 11px;font-size:9.6px;font-weight:600;
+}
+.sello{
+  margin-top:5mm;min-height:14px;
+  font-family:'PlexMono',monospace;font-weight:600;font-size:8.6px;
+  letter-spacing:.05em;color:var(--principal);
 }
 .checkline input[type=checkbox]:checked{background:var(--acento);border-color:var(--acento)}
 .checkline input[type=checkbox]:checked::after{
@@ -265,6 +278,9 @@ body.mobile .pax-row input:nth-of-type(3){flex:1 1 55%}
 body.mobile .pax-row input:nth-of-type(4){flex:1 1 25%}
 body.mobile .bottom-grid{grid-template-columns:1fr;gap:0;margin-top:0}
 body.mobile .note{font-size:11px;line-height:1.55}
+body.mobile .pax-acciones{margin-top:14px}
+body.mobile .pax-acciones button{font-size:13px;padding:10px 14px;border-radius:9px}
+body.mobile .sello{margin-top:20px;font-size:11px}
 body.mobile .sign{grid-template-columns:1fr;gap:18px;margin-top:22px}
 body.mobile .sign input{height:38px;min-height:38px;padding:8px 2px 6px}
 body.mobile .footer{
@@ -317,13 +333,15 @@ body.mobile .footer-right{text-align:left;margin-top:6px}
 
   <div class="section-title">Datos del vuelo</div>
   <div class="grid">
-    <div class="field"><label>Fecha de ida</label><input type="date"/></div>
-    <div class="field"><label>Horario de ida</label><input type="time"/></div>
-    <div class="field"><label>Fecha de vuelta</label><input type="date"/></div>
-    <div class="field"><label>Horario de vuelta</label><input type="time"/></div>
+    <div class="field"><label>Ida · fecha y horario</label>
+      <div class="duo"><input type="date"/><input type="time"/></div>
+    </div>
+    <div class="field"><label>Vuelta · fecha y horario</label>
+      <div class="duo"><input type="date"/><input type="time"/></div>
+    </div>
     <div class="field"><label>Origen</label><input type="text"/></div>
     <div class="field"><label>Destino</label><input type="text"/></div>
-    <div class="field"><label>Cantidad de pasajeros</label><input type="number" min="1" max="6"/></div>
+    <div class="field"><label>Cantidad de pasajeros</label><input type="number" id="fcant" min="1" max="6"/></div>
     <div class="full chk-cell">
       <label class="checkline"><input type="checkbox"/><span>Los mismos pasajeros realizan ida y vuelta.</span></label>
     </div>
@@ -334,6 +352,10 @@ body.mobile .footer-right{text-align:left;margin-top:6px}
     <div>N°</div><div>Nombre y apellido</div><div>DNI / Pasaporte</div><div>Nacionalidad</div><div>Edad</div>
   </div>
   <div id="pax"></div>
+  <div class="pax-acciones no-pdf">
+    <button type="button" id="masPax">+ Agregar pasajero</button>
+    <button type="button" id="menosPax" hidden>− Quitar último</button>
+  </div>
 
   <div class="bottom-grid">
     <div>
@@ -346,7 +368,7 @@ body.mobile .footer-right{text-align:left;margin-top:6px}
     </div>
     <div>
       <div class="section-title">Observaciones generales</div>
-      <div class="field"><textarea maxlength="200" placeholder="Equipaje, mascotas, requerimientos especiales…"></textarea></div>
+      <div class="field"><textarea maxlength="200"></textarea></div>
     </div>
   </div>
 
@@ -356,10 +378,7 @@ body.mobile .footer-right{text-align:left;margin-top:6px}
   </label>
   <p class="note">La programación definitiva del vuelo queda sujeta a la confirmación comercial y a las condiciones operativas y meteorológicas aplicables al momento de la operación.</p>
 
-  <div class="sign">
-    <div><label>Fecha de confirmación</label><input type="date"/></div>
-    <div><label>Firma / aclaración del responsable</label><input type="text"/></div>
-  </div>
+  <div class="sello" id="sello"></div>
 
   <div class="footer">
     <div><strong>Flyber</strong> · Aviación privada</div>
@@ -797,19 +816,48 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
   'use strict';
 
   /* ---------- Filas de pasajeros ---------- */
-  var pax = document.getElementById('pax');
-  for(var i=1;i<=6;i++){
-    var n = ('0'+i).slice(-2);
+  function fechaAR(v){
+    if(!v) return '';
+    var p = v.split('-');
+    return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : v;
+  }
+
+  var MAX_PAX = 6;
+  var pax     = document.getElementById('pax');
+  var masBtn  = document.getElementById('masPax');
+  var menosBtn= document.getElementById('menosPax');
+  var cant    = document.getElementById('fcant');
+
+  function nuevaFila(n){
     var row = document.createElement('div');
     row.className = 'pax-row';
     row.innerHTML =
-      '<div class="num"><i>Pasajero </i>'+n+'</div>'+
+      '<div class="num"><i>Pasajero </i>'+('0'+n).slice(-2)+'</div>'+
       '<input type="text" placeholder="Nombre y apellido"/>'+
       '<input type="text" placeholder="DNI / Pasaporte"/>'+
       '<input type="text" placeholder="Nacionalidad"/>'+
       '<input type="number" min="0" max="120" placeholder="Edad"/>';
-    pax.appendChild(row);
+    return row;
   }
+  function sincronizar(){
+    var n = pax.children.length;
+    masBtn.hidden   = n >= MAX_PAX;
+    menosBtn.hidden = n <= 1;
+    cant.value = n;
+  }
+  pax.appendChild(nuevaFila(1));
+  sincronizar();
+
+  masBtn.addEventListener('click', function(){
+    if(pax.children.length >= MAX_PAX) return;
+    pax.appendChild(nuevaFila(pax.children.length + 1));
+    sincronizar();
+  });
+  menosBtn.addEventListener('click', function(){
+    if(pax.children.length <= 1) return;
+    pax.removeChild(pax.lastElementChild);
+    sincronizar();
+  });
 
   /* ---------- Vista celular por clase (no por media query) ---------- */
   function ajustar(){
@@ -818,6 +866,19 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
   ajustar();
   window.addEventListener('resize', ajustar);
   window.addEventListener('orientationchange', ajustar);
+
+  /* ---------- Sello de confirmación automático ---------- */
+  var sello    = document.getElementById('sello');
+  var chkConf  = document.querySelectorAll('.checkline input[type=checkbox]')[1];
+  var contacto = document.getElementById('fcontacto');
+  function marcarSello(){
+    var nom = (contacto.value || '').trim();
+    sello.textContent = (chkConf.checked && nom)
+      ? 'Confirmado por ' + nom + ' \u00B7 ' + fechaAR(document.getElementById('femision').value)
+      : '';
+  }
+  chkConf.addEventListener('change', marcarSello);
+  contacto.addEventListener('input', marcarSello);
 
   /* ---------- Observaciones: crece solo en celular ---------- */
   var obs = document.querySelector('#ficha textarea');
@@ -834,12 +895,6 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
   var iso = hoy.getFullYear()+'-'+('0'+(hoy.getMonth()+1)).slice(-2)+'-'+('0'+hoy.getDate()).slice(-2);
   document.getElementById('femision').value = iso;
 
-  /* ---------- Utilidades ---------- */
-  function fechaAR(v){
-    if(!v) return '';
-    var p = v.split('-');
-    return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : v;
-  }
   function textoDe(el){
     if(el.type === 'date') return fechaAR(el.value);
     if(el.type === 'time') return el.value ? el.value+' hs' : '';
@@ -893,6 +948,8 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
         doc.body.style.margin = '0';
         doc.body.style.background = '#FFFFFF';
         var tb = doc.querySelector('.toolbar'); if(tb) tb.style.display = 'none';
+        var np = doc.querySelectorAll('.no-pdf');
+        for(var k=0;k<np.length;k++) np[k].parentNode.removeChild(np[k]);
         var vl = doc.getElementById('veil');    if(vl) vl.style.display = 'none';
         var pg = doc.getElementById('ficha');
         pg.style.position = 'absolute';
@@ -951,6 +1008,10 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
       else c[i].value = '';
     }
     document.getElementById('femision').value = iso;
+    while(pax.children.length > 1) pax.removeChild(pax.lastElementChild);
+    sincronizar();
+    marcarSello();
+    obs.style.height = '';
   });
 
 })();
