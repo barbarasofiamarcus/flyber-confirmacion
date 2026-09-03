@@ -575,9 +575,8 @@ body.exporting .checkline input[type="checkbox"]{
 }
 
 
-/* En el PDF no mostrar placeholders usados solo para la vista móvil */
-body.exporting input::placeholder,
-body.exporting textarea::placeholder{
+.pdf-clean-clone input::placeholder,
+.pdf-clean-clone textarea::placeholder{
   color:transparent !important;
   opacity:0 !important;
 }
@@ -686,35 +685,108 @@ const btn = document.getElementById('descargar');
     btn.disabled = true;
     btn.textContent = 'Generando PDF...';
 
+    let clone = null;
+
     try{
       await document.fonts.ready;
 
-      // Safari/html2canvas puede capturar placeholders aunque estén ocultos por CSS.
-      // Los quitamos temporalmente antes de generar el PDF y luego los restauramos.
-      const camposConPlaceholder = Array.from(document.querySelectorAll('input[placeholder], textarea[placeholder]'));
-      const placeholdersOriginales = camposConPlaceholder.map(el => ({
-        el,
-        placeholder: el.getAttribute('placeholder')
-      }));
-      camposConPlaceholder.forEach(el => el.setAttribute('placeholder',''));
+      const { jsPDF } = window.jspdf;
 
-      document.body.classList.add('exporting');
+      // Crear una copia exclusiva para el PDF.
+      clone = ficha.cloneNode(true);
+      clone.removeAttribute('id');
+      clone.classList.add('pdf-clean-clone');
 
-      const stage = document.getElementById('mobileStage');
-      const oldTransform = stage ? stage.style.transform : '';
-      const oldMarginLeft = stage ? stage.style.marginLeft : '';
-      const oldMarginBottom = stage ? stage.style.marginBottom : '';
+      // Quitar TODOS los placeholders de la copia.
+      clone.querySelectorAll('input, textarea').forEach(el => {
+        el.removeAttribute('placeholder');
+      });
 
-      if(stage){
-        stage.style.transform = 'none';
-        stage.style.marginLeft = '0';
-        stage.style.marginBottom = '0';
+      // La copia se renderiza fuera de pantalla con medidas A4 reales.
+      Object.assign(clone.style, {
+        position: 'fixed',
+        left: '-10000px',
+        top: '0',
+        width: '210mm',
+        height: '297mm',
+        minHeight: '297mm',
+        margin: '0',
+        padding: '14mm 16mm 22mm',
+        overflow: 'hidden',
+        boxShadow: 'none',
+        transform: 'none',
+        background: '#FBF9F5',
+        zIndex: '-9999'
+      });
+
+      document.body.appendChild(clone);
+
+      // Forzar en la copia el layout A4 de escritorio.
+      clone.querySelectorAll('.pax-head').forEach(el => {
+        el.style.display = 'grid';
+        el.style.gridTemplateColumns = '22px 1.55fr 1.05fr .9fr .42fr';
+        el.style.gap = '8px';
+      });
+
+      clone.querySelectorAll('.pax-row').forEach(el => {
+        el.style.display = 'grid';
+        el.style.gridTemplateColumns = '22px 1.55fr 1.05fr .9fr .42fr';
+        el.style.gap = '8px';
+        el.style.minHeight = '24px';
+        el.style.padding = '3px 2px';
+      });
+
+      clone.querySelectorAll('.pax-row input').forEach(el => {
+        el.style.gridColumn = 'auto';
+        el.style.gridRow = 'auto';
+        el.style.minHeight = '0';
+      });
+
+      const bottomGrid = clone.querySelector('.bottom-grid');
+      if(bottomGrid){
+        bottomGrid.style.display = 'grid';
+        bottomGrid.style.gridTemplateColumns = '1.05fr .95fr';
+        bottomGrid.style.gap = '24px';
+        bottomGrid.style.marginTop = '4mm';
       }
 
-      // Wait one frame so Safari recalculates the exact A4 layout.
+      const sign = clone.querySelector('.sign');
+      if(sign){
+        sign.style.display = 'grid';
+        sign.style.gridTemplateColumns = '1fr 1fr';
+        sign.style.gap = '18px';
+      }
+
+      const footer = clone.querySelector('.footer');
+      if(footer){
+        footer.style.position = 'absolute';
+        footer.style.left = '16mm';
+        footer.style.right = '16mm';
+        footer.style.bottom = '6mm';
+        footer.style.display = 'flex';
+        footer.style.justifyContent = 'space-between';
+        footer.style.alignItems = 'flex-end';
+      }
+
+      const footerRight = clone.querySelector('.footer-right');
+      if(footerRight) footerRight.style.textAlign = 'right';
+
+      // Esperar dos frames para que Safari termine de maquetar la copia.
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-      const { jsPDF } = window.jspdf;
+      const canvas = await html2canvas(clone,{
+        scale: 2.5,
+        useCORS: true,
+        backgroundColor: '#FBF9F5',
+        scrollX: 0,
+        scrollY: 0,
+        width: clone.scrollWidth,
+        height: clone.scrollHeight,
+        windowWidth: 1400,
+        windowHeight: 1800,
+        logging: false
+      });
+
       const pdf = new jsPDF({
         orientation:'portrait',
         unit:'mm',
@@ -722,43 +794,21 @@ const btn = document.getElementById('descargar');
         compress:true
       });
 
-      const canvas = await html2canvas(ficha,{
-        scale:2.4,
-        useCORS:true,
-        backgroundColor:'#FBF9F5',
-        scrollX:0,
-        scrollY:0,
-        width:ficha.scrollWidth,
-        height:ficha.scrollHeight,
-        windowWidth:Math.max(ficha.scrollWidth, 1200),
-        windowHeight:Math.max(ficha.scrollHeight, 1600),
-        logging:false
-      });
+      pdf.addImage(
+        canvas.toDataURL('image/jpeg', 0.98),
+        'JPEG',
+        0, 0, 210, 297,
+        undefined,
+        'FAST'
+      );
 
-      const img = canvas.toDataURL('image/jpeg',0.98);
-      pdf.addImage(img,'JPEG',0,0,210,297,undefined,'FAST');
       pdf.save('FlyBer - Ficha de Confirmacion de Vuelo.pdf');
-
-      document.body.classList.remove('exporting');
-      if(stage){
-        stage.style.transform = oldTransform;
-        stage.style.marginLeft = oldMarginLeft;
-        stage.style.marginBottom = oldMarginBottom;
-      }
 
     }catch(err){
       console.error(err);
       alert('No se pudo generar el PDF. Probá nuevamente.');
     }finally{
-      document.body.classList.remove('exporting');
-
-      // Restaurar placeholders solo para la vista del formulario en celular.
-      if (typeof placeholdersOriginales !== 'undefined') {
-        placeholdersOriginales.forEach(item => {
-          if (item.placeholder !== null) item.el.setAttribute('placeholder', item.placeholder);
-        });
-      }
-
+      if(clone && clone.parentNode) clone.parentNode.removeChild(clone);
       btn.disabled = false;
       btn.textContent = original;
     }
