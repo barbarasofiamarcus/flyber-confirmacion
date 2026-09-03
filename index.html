@@ -688,6 +688,16 @@ const btn = document.getElementById('descargar');
 
     try{
       await document.fonts.ready;
+
+      // Safari/html2canvas puede capturar placeholders aunque estén ocultos por CSS.
+      // Los quitamos temporalmente antes de generar el PDF y luego los restauramos.
+      const camposConPlaceholder = Array.from(document.querySelectorAll('input[placeholder], textarea[placeholder]'));
+      const placeholdersOriginales = camposConPlaceholder.map(el => ({
+        el,
+        placeholder: el.getAttribute('placeholder')
+      }));
+      camposConPlaceholder.forEach(el => el.setAttribute('placeholder',''));
+
       document.body.classList.add('exporting');
 
       const stage = document.getElementById('mobileStage');
@@ -741,6 +751,13 @@ const btn = document.getElementById('descargar');
       alert('No se pudo generar el PDF. Probá nuevamente.');
     }finally{
       document.body.classList.remove('exporting');
+
+      // Restaurar placeholders solo para la vista del formulario en celular.
+      if (typeof placeholdersOriginales !== 'undefined') {
+        placeholdersOriginales.forEach(item => {
+          if (item.placeholder !== null) item.el.setAttribute('placeholder', item.placeholder);
+        });
+      }
 
       btn.disabled = false;
       btn.textContent = original;
