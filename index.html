@@ -839,14 +839,14 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
       '<input type="number" min="0" max="120" placeholder="Edad"/>';
     return row;
   }
-  function sincronizar(){
+  function sincronizar(inicial){
     var n = pax.children.length;
     masBtn.hidden   = n >= MAX_PAX;
     menosBtn.hidden = n <= 1;
-    cant.value = n;
+    if(!inicial) cant.value = n;   // arranca vacío, no en 1
   }
   pax.appendChild(nuevaFila(1));
-  sincronizar();
+  sincronizar(true);
 
   masBtn.addEventListener('click', function(){
     if(pax.children.length >= MAX_PAX) return;
@@ -1009,7 +1009,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     }
     document.getElementById('femision').value = iso;
     while(pax.children.length > 1) pax.removeChild(pax.lastElementChild);
-    sincronizar();
+    sincronizar(true);
     marcarSello();
     obs.style.height = '';
   });
